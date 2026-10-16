@@ -1,3 +1,9 @@
+# Start everything:   docker compose up --build
+#   db       PostgreSQL (data kept in the pgdata volume)
+#   service  the HTTP API; on start-up it creates the tables and the four predefined plans by itself
+#   client   the example client: runs one scenario against the service, prints the result, exits
+#
+# Run the automated tests inside Docker:   docker compose --profile test run --rm tests
 services:
   db:
     image: postgres:16-alpine
@@ -23,6 +29,34 @@ services:
       PORT: 3000
     ports:
       - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  client:
+    build: ./client
+    environment:
+      SERVICE_URL: http://service:3000
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key-change-me}
+    depends_on:
+      service:
+        condition: service_healthy
+    restart: "no"
+
+  # Only started on request (profile "test"): docker compose --profile test run --rm tests
+  tests:
+    profiles: ["test"]
+    build:
+      context: ./service
+      target: build
+    command: ["npm", "test"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-metering}:${POSTGRES_PASSWORD:-metering}@db:5432/${POSTGRES_DB:-metering}
     depends_on:
       db:
         condition: service_healthy
