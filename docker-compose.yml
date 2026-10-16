@@ -4,6 +4,7 @@
 #   client   the example client: runs one scenario against the service, prints the result, exits
 #
 # Run the automated tests inside Docker:   docker compose --profile test run --rm tests
+# Run the load test inside Docker:         docker compose --profile load run --rm loadtest
 services:
   db:
     image: postgres:16-alpine
@@ -59,6 +60,17 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-metering}:${POSTGRES_PASSWORD:-metering}@db:5432/${POSTGRES_DB:-metering}
     depends_on:
       db:
+        condition: service_healthy
+
+  # Only started on request (profile "load"): docker compose --profile load run --rm loadtest
+  loadtest:
+    profiles: ["load"]
+    build: ./loadtest
+    environment:
+      SERVICE_URL: http://service:3000
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key-change-me}
+    depends_on:
+      service:
         condition: service_healthy
 
 volumes:
