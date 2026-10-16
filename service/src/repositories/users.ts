@@ -51,3 +51,12 @@ export async function list(db: Db, accountId: number, limit: number, offset: num
 export async function setPlan(db: Db, userId: number, accountId: number, planId: number): Promise<void> {
   await db.query(`UPDATE users SET plan_id = $3 WHERE id = $1 AND account_id = $2`, [userId, accountId, planId]);
 }
+
+// Just the internal id (used by consume, which does not need the plan from this query).
+export async function findIdByExternalId(db: Db, accountId: number, externalUserId: string): Promise<number | null> {
+  const { rows } = await db.query<{ id: number }>(
+    `SELECT id FROM users WHERE account_id = $1 AND external_user_id = $2`,
+    [accountId, externalUserId],
+  );
+  return rows[0]?.id ?? null;
+}

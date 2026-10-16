@@ -5,11 +5,14 @@ import { AppError } from '../errors.js';
 import { authenticateAccount } from './auth.js';
 import { accountRoutes } from './routes/accountRoutes.js';
 import { adminRoutes } from './routes/admin.js';
+import { meteringRoutes } from './routes/meteringRoutes.js';
 
 // Builds the whole HTTP application. It does NOT listen on a port: server.ts does that.
 // Keeping it separate lets the tests call app.inject(...) without any network.
-export function buildApp(deps: { pool: pg.Pool; config: Config }): FastifyInstance {
+// `clock` is injectable so tests can pretend it is another month; production uses the real time.
+export function buildApp(deps: { pool: pg.Pool; config: Config; clock?: () => Date }): FastifyInstance {
   const { pool, config } = deps;
+  const clock = deps.clock ?? (() => new Date());
   const app = Fastify({ logger: config.logLevel === 'silent' ? false : { level: config.logLevel } });
 
   // One JSON shape for every error:  { "error": { "code", "message", "details"? } }
@@ -42,6 +45,7 @@ export function buildApp(deps: { pool: pg.Pool; config: Config }): FastifyInstan
   app.register(async (v1) => {
     v1.addHook('onRequest', authenticateAccount(pool));
     accountRoutes(v1, { pool });
+    meteringRoutes(v1, { pool, clock });
   });
 
   return app;

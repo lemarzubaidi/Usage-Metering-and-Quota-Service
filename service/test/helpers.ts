@@ -15,13 +15,13 @@ export interface TestEnv {
 }
 
 // Tests run against a REAL PostgreSQL (DATABASE_URL), not a mock: the database rules are part of what we test.
-export async function startTestEnv(): Promise<TestEnv> {
+export async function startTestEnv(opts: { clock?: () => Date } = {}): Promise<TestEnv> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('Set DATABASE_URL to a PostgreSQL database to run the tests');
   const pool = createPool(databaseUrl);
   await runMigrations(pool);
   const config: Config = { databaseUrl, adminApiKey: ADMIN_KEY, port: 0, host: '127.0.0.1', logLevel: 'silent' };
-  const app = buildApp({ pool, config });
+  const app = buildApp({ pool, config, clock: opts.clock });
   await app.ready();
   return {
     app,
@@ -85,4 +85,37 @@ export async function createCustomPlan(
   });
   if (res.statusCode !== 201) throw new Error(`createCustomPlan failed: ${res.statusCode} ${res.body}`);
   return res.json().plan.id;
+}
+
+export async function consume(
+  app: FastifyInstance,
+  acct: TestAccount,
+  body: { user_id: string; request_id: string; units: unknown },
+) {
+  const res = await app.inject({ method: 'POST', url: '/v1/consume', headers: acct.auth, payload: body });
+  return { status: res.statusCode, body: res.json() };
+}
+
+// Gives the account a custom account-scope plan and returns the plan id.
+export async function setAccountLimits(
+  app: FastifyInstance,
+  acct: TestAccount,
+  limits: { monthly_allowance: number; max_per_request: number },
+): Promise<number> {
+  const planId = await createCustomPlan(app, acct, { scope: 'account', ...limits });
+  const res = await app.inject({ method: 'PUT', url: '/v1/account/plan', headers: acct.auth, payload: { plan_id: planId } });
+  if (res.statusCode !== 200) throw new Error(`setAccountLimits failed: ${res.body}`);
+  return planId;
+}
+
+// Creates a user on a new custom user-scope plan with exactly these limits.
+export async function createUserWithLimits(
+  app: FastifyInstance,
+  acct: TestAccount,
+  userId: string,
+  limits: { monthly_allowance: number; max_per_request: number },
+): Promise<number> {
+  const planId = await createCustomPlan(app, acct, { scope: 'user', ...limits });
+  await createUser(app, acct, userId, planId);
+  return planId;
 }
