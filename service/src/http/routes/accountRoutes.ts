@@ -4,7 +4,7 @@ import * as accountsService from '../../services/accounts.js';
 import * as plansService from '../../services/plans.js';
 import * as usersService from '../../services/users.js';
 import { createPlanBody, createUserBody, idParam, pageQuery, parse, setPlanBody, updatePlanBody } from '../schemas.js';
-import { accountView, planView, userView } from '../view.js';
+import { accountView, planView, userView } from '../../services/view.js';
 
 // Everything under /v1 except consume/usage/history (those are in meteringRoutes.ts).
 export function accountRoutes(app: FastifyInstance, deps: { pool: pg.Pool }) {

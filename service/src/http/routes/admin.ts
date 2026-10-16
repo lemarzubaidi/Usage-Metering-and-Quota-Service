@@ -3,7 +3,7 @@ import type pg from 'pg';
 import * as accountsService from '../../services/accounts.js';
 import { authenticateAdmin } from '../auth.js';
 import { createAccountBody, parse } from '../schemas.js';
-import { accountView } from '../view.js';
+import { accountView } from '../../services/view.js';
 
 export function adminRoutes(app: FastifyInstance, deps: { pool: pg.Pool; adminApiKey: string }) {
   app.register(async (admin) => {

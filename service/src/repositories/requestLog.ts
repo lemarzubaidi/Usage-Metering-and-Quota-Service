@@ -57,3 +57,35 @@ export async function insert(
     [r.accountId, r.userId, r.requestId, r.units, r.decision, r.rejectedBy, r.rule, r.period, JSON.stringify(r.details)],
   );
 }
+
+// History, newest first. Keyset pagination: "give me rows with id < the last id you already saw".
+// Unlike OFFSET it stays fast and stable on a big table, even while new rows are being added.
+// Every query starts with account_id = $1: an account can only ever read its own history.
+export async function list(
+  db: Db,
+  f: {
+    accountId: number;
+    userId?: number;
+    period?: string;
+    decision?: 'accepted' | 'rejected';
+    beforeId?: number;
+    limit: number;
+  },
+): Promise<LogRow[]> {
+  const params: unknown[] = [f.accountId];
+  const where = ['l.account_id = $1'];
+  const add = (sql: string, value: unknown) => {
+    params.push(value);
+    where.push(sql.replace('?', `$${params.length}`));
+  };
+  if (f.userId !== undefined) add('l.user_id = ?', f.userId);
+  if (f.period !== undefined) add('l.period = ?', f.period);
+  if (f.decision !== undefined) add('l.decision = ?', f.decision);
+  if (f.beforeId !== undefined) add('l.id < ?', f.beforeId);
+  params.push(f.limit);
+  const { rows } = await db.query<LogRow>(
+    `${SELECT_LOG} WHERE ${where.join(' AND ')} ORDER BY l.id DESC LIMIT $${params.length}`,
+    params,
+  );
+  return rows;
+}

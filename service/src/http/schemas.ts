@@ -43,3 +43,23 @@ export function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer
   }
   return result.data;
 }
+
+export const usageQuery = z
+  .object({
+    user_id: externalId.optional(),
+    period: z.string().optional(),
+    // only used when user_id is omitted: the account's users are listed, a page at a time
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    offset: z.coerce.number().int().min(0).default(0),
+  })
+  .strict();
+
+export const historyQuery = z
+  .object({
+    user_id: externalId.optional(),
+    period: z.string().optional(),
+    decision: z.enum(['accepted', 'rejected']).optional(),
+    limit: z.coerce.number().int().min(1).max(200).default(50),
+    cursor: z.string().regex(/^\d{1,15}$/, 'cursor must be the next_cursor value from a previous response').transform(Number).optional(),
+  })
+  .strict();
