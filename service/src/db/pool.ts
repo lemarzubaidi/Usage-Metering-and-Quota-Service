@@ -16,7 +16,7 @@ export function createPool(connectionString = process.env.DATABASE_URL): pg.Pool
   if (!connectionString) throw new Error('DATABASE_URL is not set');
   return new pg.Pool({
     connectionString,
-    max: Number(process.env.DB_POOL_MAX ?? 20),
+    max: Number(process.env.DB_POOL_MAX ?? 10),
   });
 }
 

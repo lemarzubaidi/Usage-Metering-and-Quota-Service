@@ -88,32 +88,3 @@ export async function updateCustom(
   );
   return rows[0] ?? null;
 }
-
-export interface PlanLimits {
-  plan_id: number;
-  plan_name: string;
-  monthly_allowance: number;
-  max_per_request: number;
-}
-
-// The limits that apply RIGHT NOW to one user and to its account (read inside the consume transaction,
-// after the counters are locked, so a plan change committed a moment ago is already visible).
-export async function limitsFor(
-  db: Db,
-  accountId: number,
-  userId: number,
-): Promise<{ user: PlanLimits; account: PlanLimits } | null> {
-  const { rows } = await db.query<PlanLimits & { level: 'user' | 'account' }>(
-    `SELECT 'user' AS level, p.id AS plan_id, p.name AS plan_name, p.monthly_allowance, p.max_per_request
-       FROM users u JOIN plans p ON p.id = u.plan_id
-      WHERE u.id = $2 AND u.account_id = $1
-     UNION ALL
-     SELECT 'account', p.id, p.name, p.monthly_allowance, p.max_per_request
-       FROM accounts a JOIN plans p ON p.id = a.plan_id
-      WHERE a.id = $1`,
-    [accountId, userId],
-  );
-  const user = rows.find((r) => r.level === 'user');
-  const account = rows.find((r) => r.level === 'account');
-  return user && account ? { user, account } : null;
-}

@@ -3,11 +3,8 @@ import { withTransaction } from '../db/pool.js';
 import { periodLabel, periodStart } from '../domain/period.js';
 import { evaluate, remainingOf, type Level, type RuleName } from '../domain/rules.js';
 import { conflict, notFound } from '../errors.js';
-import * as plansRepo from '../repositories/plans.js';
-import * as logRepo from '../repositories/requestLog.js';
-import type { LogDetails, LogRow } from '../repositories/requestLog.js';
-import * as usageRepo from '../repositories/usage.js';
-import * as usersRepo from '../repositories/users.js';
+import * as consumption from '../repositories/consumption.js';
+import type { LogDetails, StoredOutcome } from '../repositories/consumption.js';
 
 export interface ConsumeInput {
   user_id: string; // the caller's own id for the user
@@ -29,16 +26,14 @@ export interface ConsumeResult {
   replayed: boolean; // true = this is the saved answer to an earlier identical request, nothing was consumed again
 }
 
-// The whole consume operation = ONE database transaction:
-//   1. find the user (inside the caller's own account only)
-//   2. make sure this month's counters exist
-//   3. LOCK the account counter, then the user counter      <- concurrent requests queue up here
-//   4. idempotency: has this request_id already been answered?  (checked after the lock: see below)
-//   5. read the plans that apply right now
-//   6. evaluate the four rules
-//   7. if accepted: add the units to both counters
-//   8. write the request_log row (accepted AND rejected requests are recorded)
-//   9. COMMIT (releases the locks)
+// The whole consume operation = ONE database transaction (see repositories/consumption.ts for the SQL):
+//   1. find the user (inside the caller's own account only) and make sure this month's counters exist
+//   2. LOCK the account counter and the user counter          <- concurrent requests of this account queue here
+//   3. read, in one query: was this request_id already answered?  which plans apply right now?
+//   4. idempotency: if it was answered, return the saved answer (or 409 if the data differs)
+//   5. evaluate the four rules                                (pure function, no database)
+//   6. save: add the units to both counters if accepted + write the request_log row (one statement)
+//   7. COMMIT (releases the locks)
 // Either all of it happens or none of it does.
 export async function consume(
   pool: pg.Pool,
@@ -49,17 +44,15 @@ export async function consume(
   const period = periodStart(clock());
 
   return withTransaction(pool, async (tx) => {
-    const userId = await usersRepo.findIdByExternalId(tx, accountId, input.user_id);
+    const userId = await consumption.resolveUserAndEnsureCounters(tx, accountId, input.user_id, period);
     if (userId === null) throw notFound(`User '${input.user_id}' not found`);
 
-    await usageRepo.ensureCounters(tx, accountId, userId, period);
-    const consumedAccount = await usageRepo.lockAccountCounter(tx, accountId, period);
-    const consumedUser = await usageRepo.lockUserCounter(tx, userId, period);
+    const consumed = await consumption.lockCounters(tx, accountId, userId, period);
 
-    // Idempotency check comes AFTER taking the lock. Every request of an account first locks the
-    // account counter, so two requests with the same request_id cannot be here at the same time: the
-    // second one waits, and when it gets the lock the first one's log row is already committed and visible.
-    const existing = await logRepo.findByRequestId(tx, accountId, input.request_id);
+    // The idempotency check comes AFTER the lock. Every request of an account first locks the account
+    // counter, so two requests with the same request_id cannot be here at the same time: the second one
+    // waits, and when it gets the lock the first one's log row is already committed and visible.
+    const { existing, user, account } = await consumption.readContext(tx, accountId, userId, input.request_id);
     if (existing) {
       if (existing.user_id !== userId || existing.units !== input.units) {
         throw conflict(
@@ -67,43 +60,34 @@ export async function consume(
           `request_id '${input.request_id}' was already used with different data (user or units)`,
         );
       }
-      return fromLog(existing, true);
+      return fromStored(existing, true);
     }
-
-    const limits = await plansRepo.limitsFor(tx, accountId, userId);
-    if (!limits) throw new Error('user or account vanished during consume'); // cannot happen: FKs, no deletes
 
     const decision = evaluate({
       units: input.units,
-      user: limits.user,
-      account: limits.account,
-      consumedUser,
-      consumedAccount,
+      user,
+      account,
+      consumedUser: consumed.user,
+      consumedAccount: consumed.account,
     });
 
-    if (decision.accepted) {
-      await usageRepo.addToAccountCounter(tx, accountId, period, input.units);
-      await usageRepo.addToUserCounter(tx, userId, period, input.units);
-    }
-    const afterUser = consumedUser + (decision.accepted ? input.units : 0);
-    const afterAccount = consumedAccount + (decision.accepted ? input.units : 0);
-
+    const added = decision.accepted ? input.units : 0;
     const details: LogDetails = {
-      limits: {
-        user: toSnapshot(limits.user),
-        account: toSnapshot(limits.account),
+      limits: { user, account },
+      consumed_before: { user: consumed.user, account: consumed.account },
+      remaining_after: {
+        user: remainingOf(user, consumed.user + added),
+        account: remainingOf(account, consumed.account + added),
       },
-      consumed_before: { user: consumedUser, account: consumedAccount },
-      remaining_after: { user: remainingOf(limits.user, afterUser), account: remainingOf(limits.account, afterAccount) },
       violations: decision.accepted ? [] : decision.violations,
     };
 
-    await logRepo.insert(tx, {
+    await consumption.recordDecision(tx, {
       accountId,
       userId,
       requestId: input.request_id,
       units: input.units,
-      decision: decision.accepted ? 'accepted' : 'rejected',
+      accepted: decision.accepted,
       rejectedBy: decision.accepted ? null : decision.rejected_by,
       rule: decision.accepted ? null : decision.rule,
       period,
@@ -123,15 +107,8 @@ export async function consume(
   });
 }
 
-const toSnapshot = (l: plansRepo.PlanLimits) => ({
-  plan_id: l.plan_id,
-  plan_name: l.plan_name,
-  monthly_allowance: l.monthly_allowance,
-  max_per_request: l.max_per_request,
-});
-
-// Rebuilds the saved answer from the log row (used for idempotent replays).
-export function fromLog(row: LogRow, replayed: boolean): ConsumeResult {
+// Rebuilds the saved answer (used for idempotent replays).
+function fromStored(row: StoredOutcome, replayed: boolean): ConsumeResult {
   const accepted = row.decision === 'accepted';
   return {
     accepted,
