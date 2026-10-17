@@ -18,7 +18,7 @@ export async function createUser(pool: pg.Pool, accountId: number, input: { exte
   try {
     await usersRepo.insert(pool, accountId, input.external_user_id, planId);
   } catch (err) {
-    // UNIQUE (account_id, external_user_id): the same user id twice inside ONE account.
+
     if (isPgError(err, PG_UNIQUE_VIOLATION)) {
       throw conflict('user_exists', `User '${input.external_user_id}' already exists in this account`);
     }

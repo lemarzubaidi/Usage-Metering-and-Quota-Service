@@ -28,8 +28,6 @@ export async function createCustomPlan(
   }
 }
 
-// Updating a plan changes the limits for EVERY account/user assigned to it, from their next request on.
-// Consumed units are untouched (counters store consumption only), so nobody gets a fresh allowance.
 export async function updateCustomPlan(
   pool: pg.Pool,
   accountId: number,

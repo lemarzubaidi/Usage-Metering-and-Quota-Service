@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-// All settings come from environment variables (12-factor style), validated once at start-up.
-// If something is missing the service refuses to start instead of failing later in a strange way.
 const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   ADMIN_API_KEY: z.string().min(8, 'ADMIN_API_KEY must be at least 8 characters'),

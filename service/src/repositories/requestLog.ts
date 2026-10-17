@@ -5,14 +5,14 @@ import type { LogDetails } from './consumption.js';
 export interface LogRow {
   id: number;
   account_id: number;
-  user_id: number; // internal id
-  external_user_id: string; // the caller's id (joined from users)
+  user_id: number;
+  external_user_id: string;
   request_id: string;
   units: number;
   decision: 'accepted' | 'rejected';
   rejected_by: Level | null;
   rule: RuleName | null;
-  period: string; // 'YYYY-MM-01'
+  period: string;
   details: LogDetails;
   created_at: Date | string;
 }
@@ -22,9 +22,6 @@ const SELECT_LOG = `
          l.rejected_by, l.rule, l.period, l.details, l.created_at
     FROM request_log l JOIN users u ON u.id = l.user_id`;
 
-// History, newest first. Keyset pagination: "give me rows with id < the last id you already saw".
-// Unlike OFFSET it stays fast and stable on a big table, even while new rows are being added.
-// Every query starts with account_id = $1: an account can only ever read its own history.
 export async function list(
   db: Db,
   f: {

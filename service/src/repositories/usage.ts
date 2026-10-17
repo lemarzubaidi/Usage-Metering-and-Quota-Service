@@ -1,10 +1,5 @@
 import type { Db } from '../db/pool.js';
 
-// usage_counters: one row per (account, month) with user_id NULL, and one per (user, month).
-// A row stores ONLY how much was consumed. Limits are read from the plan when a decision is made.
-// Writing and locking the counters happens in consumption.ts; this file only READS them (no lock).
-
-// Read-only (no lock): used by the usage endpoint. A missing row means nothing consumed yet.
 export async function readAccountConsumed(db: Db, accountId: number, period: string): Promise<number> {
   const { rows } = await db.query<{ consumed: number }>(
     `SELECT consumed FROM usage_counters WHERE account_id = $1 AND user_id IS NULL AND period = $2`,
@@ -30,7 +25,6 @@ export interface UserUsageRow {
   };
 }
 
-// Every user of the account with what it consumed in the month (0 if it has no counter yet) and the plan it has now.
 export async function listUsersWithConsumption(
   db: Db,
   accountId: number,

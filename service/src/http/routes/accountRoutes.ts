@@ -6,11 +6,9 @@ import * as usersService from '../../services/users.js';
 import { createPlanBody, createUserBody, idParam, pageQuery, parse, setPlanBody, updatePlanBody } from '../schemas.js';
 import { accountView, planView, userView } from '../../services/view.js';
 
-// Everything under /v1 except consume/usage/history (those are in meteringRoutes.ts).
 export function accountRoutes(app: FastifyInstance, deps: { pool: pg.Pool }) {
   const { pool } = deps;
 
-  // ---- the calling account ----
   app.get('/v1/account', async (request) => ({ account: accountView(request.account) }));
 
   app.put('/v1/account/plan', async (request) => {
@@ -19,7 +17,6 @@ export function accountRoutes(app: FastifyInstance, deps: { pool: pg.Pool }) {
     return { account: accountView(account) };
   });
 
-  // ---- plans ----
   app.get('/v1/plans', async (request) => {
     const plans = await plansService.listPlans(pool, request.account.id);
     return { plans: plans.map(planView) };
@@ -43,7 +40,6 @@ export function accountRoutes(app: FastifyInstance, deps: { pool: pg.Pool }) {
     return { plan: planView(plan) };
   });
 
-  // ---- users ----
   app.post('/v1/users', async (request, reply) => {
     const body = parse(createUserBody, request.body);
     const user = await usersService.createUser(pool, request.account.id, { external_user_id: body.user_id, plan_id: body.plan_id });

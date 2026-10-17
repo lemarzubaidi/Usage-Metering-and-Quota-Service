@@ -1,9 +1,6 @@
 import { z } from 'zod';
 import { badRequest } from '../errors.js';
 
-// Zod schemas = the contract for what a request may contain. Anything else -> 400 with the list of problems.
-// .strict() rejects unknown fields so a typo like "unit" instead of "units" is an error, not silently ignored.
-
 const MAX = Number.MAX_SAFE_INTEGER;
 
 export const positiveInt = z.number().int().positive().max(MAX);
@@ -34,7 +31,6 @@ export const pageQuery = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 
-// Validates `data` against `schema` or throws a 400 AppError listing every problem.
 export function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
   const result = schema.safeParse(data ?? {});
   if (!result.success) {
@@ -48,7 +44,7 @@ export const usageQuery = z
   .object({
     user_id: externalId.optional(),
     period: z.string().optional(),
-    // only used when user_id is omitted: the account's users are listed, a page at a time
+
     limit: z.coerce.number().int().min(1).max(200).default(50),
     offset: z.coerce.number().int().min(0).default(0),
   })

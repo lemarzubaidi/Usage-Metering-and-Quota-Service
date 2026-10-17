@@ -1,7 +1,3 @@
--- 001: plans
--- Plans are created first WITHOUT the owner FK (accounts does not exist yet).
--- The FK plans.owner_account_id -> accounts(id) is added in 002 (breaks the circular dependency).
-
 CREATE TABLE plans (
   id                 BIGSERIAL   PRIMARY KEY,
   name               TEXT        NOT NULL CHECK (length(btrim(name)) > 0),
@@ -13,17 +9,14 @@ CREATE TABLE plans (
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- needed as the target of the composite FKs (plan_id, plan_scope) in accounts/users
   UNIQUE (id, scope),
 
-  -- predefined plans belong to nobody; custom plans must belong to an account
   CONSTRAINT plans_owner_matches_kind CHECK (
     (is_predefined AND owner_account_id IS NULL) OR
     (NOT is_predefined AND owner_account_id IS NOT NULL)
   )
 );
 
--- plan names are unique per scope among predefined plans, and per owner among custom plans
 CREATE UNIQUE INDEX uq_plans_predefined_name
   ON plans (scope, name) WHERE owner_account_id IS NULL;
 

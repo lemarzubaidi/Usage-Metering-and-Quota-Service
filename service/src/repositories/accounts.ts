@@ -34,7 +34,6 @@ export async function insert(
   return rows[0]!.id;
 }
 
-// Authentication lookup: the caller sent a key, we hash it, and search by the hash (indexed, UNIQUE).
 export async function findByKeyHash(db: Db, hash: string): Promise<AccountWithPlan | null> {
   const { rows } = await db.query<AccountWithPlan>(`${JOINED} WHERE a.api_key_hash = $1`, [hash]);
   return rows[0] ?? null;

@@ -1,13 +1,3 @@
-// Load test for POST /v1/consume. Plain Node (fetch), no extra tools, so every line can be explained.
-//
-// It answers two questions:
-//   1. How fast is it?        requests per second and latency percentiles
-//   2. Is it still CORRECT?   after thousands of simultaneous requests, the counters must equal exactly
-//                             the sum of the accepted requests, and no limit may ever be exceeded
-//
-// Run:  npm run dev                 (against http://localhost:3000)
-//       SCALE=0.2 npm run dev       (smaller, quicker run)
-//       docker compose --profile load run --rm loadtest
 import { cpus } from 'node:os';
 import { performance } from 'node:perf_hooks';
 import { writeFileSync } from 'node:fs';
@@ -15,7 +5,7 @@ import { writeFileSync } from 'node:fs';
 const BASE_URL = (process.env.SERVICE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? 'dev-admin-key-change-me';
 const SCALE = Number(process.env.SCALE ?? 1);
-const OUT = process.env.OUT; // optional: also write the markdown report to this file
+const OUT = process.env.OUT;
 const scaled = (n: number) => Math.max(1, Math.round(n * SCALE));
 
 interface Reply { status: number; body: any }
@@ -30,7 +20,7 @@ async function call(method: string, path: string, key: string, body?: unknown): 
 
 async function waitForService() {
   for (let i = 0; i < 60; i++) {
-    try { if ((await fetch(`${BASE_URL}/health`)).ok) return; } catch { /* not yet */ }
+    try { if ((await fetch(`${BASE_URL}/health`)).ok) return; } catch {  }
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error(`service not reachable at ${BASE_URL}`);
@@ -71,7 +61,6 @@ interface Stats {
   acceptedUnitsByAccount: Map<number, number>;
 }
 
-// `concurrency` workers; each repeatedly takes the next request number until `total` have been sent.
 async function drive(total: number, concurrency: number, send: (i: number) => Promise<{ reply?: Reply; acct: Acct; units: number }>): Promise<Stats> {
   const latencies: number[] = [];
   const acceptedUnitsByAccount = new Map<number, number>();
@@ -118,7 +107,6 @@ async function main() {
   console.log(`Load test against ${BASE_URL} (SCALE=${SCALE})`);
   const reqId = (() => { let n = 0; return () => `L-${runId}-${++n}`; })();
 
-  // ---------- 0. baseline: one request at a time ----------
   console.log('\n0. Baseline: one request at a time (no waiting for anyone)');
   {
     const a = await newAccount('baseline', 1);
@@ -130,7 +118,6 @@ async function main() {
     report('0. baseline, 1 at a time', 1, s, ok, 'latency with no contention');
   }
 
-  // ---------- 1. many accounts, nobody reaches a limit ----------
   console.log('\n1. Many accounts, no limit reached');
   {
     const accts = await Promise.all(Array.from({ length: 10 }, (_, i) => newAccount(`many${i}`, 20)));
@@ -145,7 +132,6 @@ async function main() {
     report('1. 10 accounts, 20 users each', concurrency, s, ok, 'every account counter = sum of its accepted units');
   }
 
-  // ---------- 2. one hot account ----------
   console.log('\n2. One hot account (all requests lock the same account counter)');
   {
     const a = await newAccount('hot', 20);
@@ -158,7 +144,6 @@ async function main() {
     report('2. 1 account, 20 users', concurrency, s, ok, 'serialised by the account row lock');
   }
 
-  // ---------- 3. limits under contention ----------
   console.log('\n3. Allowance of 1000 units hit by far more requests than fit');
   {
     const a = await newAccount('limit', 10, { accountPlan: [1000, 10], userPlan: [1000, 10] });
@@ -174,7 +159,6 @@ async function main() {
     report('3. allowance 1000, many requests', concurrency, s, ok, `consumed ${consumed} (limit 1000), accepted ${s.accepted}`);
   }
 
-  // ---------- 4. the same request_id from many connections at once ----------
   console.log('\n4. Same request_id sent 300 times at once');
   {
     const a = await newAccount('retry', 1);

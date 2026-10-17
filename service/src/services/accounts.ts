@@ -7,14 +7,13 @@ import { resolveAssignablePlan } from './planAssignment.js';
 
 const DEFAULT_ACCOUNT_PLAN = 'Starter';
 
-// Admin-only. The new account's API key is returned ONCE here and never again: only its hash is stored.
 export async function createAccount(pool: pg.Pool, input: { name: string; plan_id?: number }) {
   let plan;
   if (input.plan_id === undefined) {
     plan = await plansRepo.findPredefinedByName(pool, 'account', DEFAULT_ACCOUNT_PLAN);
     if (!plan) throw new Error(`Predefined plan '${DEFAULT_ACCOUNT_PLAN}' is missing: were the migrations applied?`);
   } else {
-    // A brand-new account owns no custom plans yet, so only predefined plans can be chosen.
+
     plan = await plansRepo.findPredefinedById(pool, input.plan_id);
     if (!plan) throw notFound(`Predefined plan ${input.plan_id} not found`);
     if (plan.scope !== 'account') {

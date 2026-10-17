@@ -1,15 +1,3 @@
--- verify_schema.sql
--- Shows, with real output, that the database itself refuses wrong data.
--- Safe to run any time: everything happens inside one transaction that ends with ROLLBACK,
--- so no data is left behind.
---
--- Each line printed is one check:
---   OK    = the database behaved as the design says (wrong data refused / good data accepted)
---   FAIL  = something is wrong with the schema
---
--- The syntax inside DO $$ ... $$ is PL/pgSQL, very close to Oracle's PL/SQL
--- (DECLARE / BEGIN / EXCEPTION WHEN OTHERS THEN / END).
-
 \set ON_ERROR_STOP on
 \pset pager off
 
@@ -17,12 +5,12 @@ BEGIN;
 
 DO $$
 DECLARE
-  starter_id  BIGINT;   -- predefined account plan
-  basic_id    BIGINT;   -- predefined user plan
+  starter_id  BIGINT;
+  basic_id    BIGINT;
   acc_a       BIGINT;
   acc_b       BIGINT;
-  sara_a      BIGINT;   -- user "sara" under account A
-  sara_b      BIGINT;   -- user "sara" under account B (same external id, other account)
+  sara_a      BIGINT;
+  sara_b      BIGINT;
   passed      INT := 0;
   total       INT := 0;
 BEGIN
@@ -196,7 +184,6 @@ BEGIN
   END IF;
 END $$;
 
--- Leave nothing behind.
 ROLLBACK;
 
 \echo

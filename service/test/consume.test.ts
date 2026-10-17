@@ -17,7 +17,6 @@ let now = new Date('2026-10-15T12:00:00Z');
 beforeAll(async () => { env = await startTestEnv({ clock: () => now }); });
 afterAll(async () => { await env.close(); });
 
-// What the database says an account / user has consumed this month (looked at directly, not through the API).
 async function consumed(acct: TestAccount, userId?: string, period = '2026-10-01'): Promise<number> {
   const { rows } = userId
     ? await env.pool.query(
@@ -33,8 +32,8 @@ const logCount = async (acct: TestAccount) =>
 
 describe('accepting', () => {
   it('accepts a request, adds it to the user AND the account counter, and reports what is left', async () => {
-    const acct = await createAccount(env.app); // Starter: 10000 / 100
-    await createUser(env.app, acct, 'sara'); //   Basic:   1000 / 20
+    const acct = await createAccount(env.app);
+    await createUser(env.app, acct, 'sara');
     const r = await consume(env.app, acct, { user_id: 'sara', request_id: 'r1', units: 15 });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({
@@ -71,7 +70,7 @@ describe('accepting', () => {
 describe('rejecting', () => {
   it('rejects by the user per-request limit and consumes nothing', async () => {
     const acct = await createAccount(env.app);
-    await createUser(env.app, acct, 'sara'); // Basic max 20
+    await createUser(env.app, acct, 'sara');
     const r = await consume(env.app, acct, { user_id: 'sara', request_id: 'big', units: 21 });
     expect(r.status).toBe(200);
     expect(r.body).toMatchObject({ accepted: false, rejected_by: 'user', rule: 'max_per_request' });
@@ -82,7 +81,7 @@ describe('rejecting', () => {
   });
 
   it('rejects by the account per-request limit', async () => {
-    const acct = await createAccount(env.app); // Starter max 100
+    const acct = await createAccount(env.app);
     await createUserWithLimits(env.app, acct, 'u', { monthly_allowance: 5000, max_per_request: 500 });
     const r = await consume(env.app, acct, { user_id: 'u', request_id: 'x', units: 101 });
     expect(r.body).toMatchObject({ accepted: false, rejected_by: 'account', rule: 'max_per_request' });
@@ -94,7 +93,7 @@ describe('rejecting', () => {
     await createUserWithLimits(env.app, acct, 'ahmad', { monthly_allowance: 1000, max_per_request: 100 });
     await createUserWithLimits(env.app, acct, 'sara', { monthly_allowance: 1000, max_per_request: 100 });
     expect((await consume(env.app, acct, { user_id: 'ahmad', request_id: 'a', units: 15 })).body.accepted).toBe(true);
-    const r = await consume(env.app, acct, { user_id: 'sara', request_id: 's', units: 15 }); // sara used 0 of 1000, account has 10 left
+    const r = await consume(env.app, acct, { user_id: 'sara', request_id: 's', units: 15 });
     expect(r.body).toMatchObject({ accepted: false, rejected_by: 'account', rule: 'monthly_allowance', remaining: { user: 1000, account: 10 } });
     expect(r.body.violations[0]).toMatchObject({ level: 'account', limit: 25, consumed: 15, remaining: 10, requested: 15 });
     expect(await consumed(acct, 'sara')).toBe(0);
@@ -186,7 +185,7 @@ describe('idempotency (retries)', () => {
   it('keeps answering a retry with the ORIGINAL result even after the plan changed', async () => {
     const acct = await createAccount(env.app);
     await createUser(env.app, acct, 'sara');
-    const first = await consume(env.app, acct, { user_id: 'sara', request_id: 'r', units: 30 }); // rejected: Basic max 20
+    const first = await consume(env.app, acct, { user_id: 'sara', request_id: 'r', units: 30 });
     const premium = await planIdByName(env.app, acct, 'Premium');
     await env.app.inject({ method: 'PUT', url: '/v1/users/sara/plan', headers: acct.auth, payload: { plan_id: premium } });
     const retry = await consume(env.app, acct, { user_id: 'sara', request_id: 'r', units: 30 });
@@ -223,15 +222,15 @@ describe('idempotency (retries)', () => {
 describe('plan changes and months', () => {
   it('applies a new plan to the NEXT request, keeps consumption, and never grants a fresh allowance', async () => {
     const acct = await createAccount(env.app);
-    await createUser(env.app, acct, 'sara'); // Basic: 1000 / 20
+    await createUser(env.app, acct, 'sara');
     await consume(env.app, acct, { user_id: 'sara', request_id: '1', units: 20 });
-    expect((await consume(env.app, acct, { user_id: 'sara', request_id: '2', units: 50 })).body.accepted).toBe(false); // > 20
+    expect((await consume(env.app, acct, { user_id: 'sara', request_id: '2', units: 50 })).body.accepted).toBe(false);
 
-    const premium = await planIdByName(env.app, acct, 'Premium'); // 10000 / 200
+    const premium = await planIdByName(env.app, acct, 'Premium');
     await env.app.inject({ method: 'PUT', url: '/v1/users/sara/plan', headers: acct.auth, payload: { plan_id: premium } });
 
     const r = await consume(env.app, acct, { user_id: 'sara', request_id: '3', units: 50 });
-    expect(r.body).toMatchObject({ accepted: true, remaining: { user: 10000 - 20 - 50 } }); // the 20 already used still counts
+    expect(r.body).toMatchObject({ accepted: true, remaining: { user: 10000 - 20 - 50 } });
   });
 
   it('applies an edited custom plan to everyone assigned to it', async () => {

@@ -5,17 +5,16 @@ import pg from 'pg';
 import { createPool } from './pool.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// works from src/db (tsx) and dist/db (compiled): migrations/ sits next to src/ or dist/
+
 const MIGRATIONS_DIR = path.resolve(here, '../../migrations');
 
-// Arbitrary constant: only one instance may run migrations at a time.
 const MIGRATION_LOCK_KEY = 727001;
 
 export async function runMigrations(pool: pg.Pool): Promise<string[]> {
   const client = await pool.connect();
   const applied: string[] = [];
   try {
-    // advisory lock: if two service instances start together, one waits for the other
+
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
 
     await client.query(`
@@ -33,7 +32,7 @@ export async function runMigrations(pool: pg.Pool): Promise<string[]> {
       if (done.has(file)) continue;
       const sql = await readFile(path.join(MIGRATIONS_DIR, file), 'utf8');
       try {
-        await client.query('BEGIN');            // each migration is all-or-nothing
+        await client.query('BEGIN');
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
         await client.query('COMMIT');
@@ -50,7 +49,6 @@ export async function runMigrations(pool: pg.Pool): Promise<string[]> {
   return applied;
 }
 
-// allow: npm run migrate
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const pool = createPool();
   runMigrations(pool)

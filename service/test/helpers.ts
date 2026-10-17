@@ -14,7 +14,6 @@ export interface TestEnv {
   close: () => Promise<void>;
 }
 
-// Tests run against a REAL PostgreSQL (DATABASE_URL), not a mock: the database rules are part of what we test.
 export async function startTestEnv(opts: { clock?: () => Date } = {}): Promise<TestEnv> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error('Set DATABASE_URL to a PostgreSQL database to run the tests');
@@ -96,7 +95,6 @@ export async function consume(
   return { status: res.statusCode, body: res.json() };
 }
 
-// Gives the account a custom account-scope plan and returns the plan id.
 export async function setAccountLimits(
   app: FastifyInstance,
   acct: TestAccount,
@@ -108,7 +106,6 @@ export async function setAccountLimits(
   return planId;
 }
 
-// Creates a user on a new custom user-scope plan with exactly these limits.
 export async function createUserWithLimits(
   app: FastifyInstance,
   acct: TestAccount,

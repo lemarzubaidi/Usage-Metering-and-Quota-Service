@@ -13,8 +13,8 @@ const get = async (acct: { auth: Record<string, string> }, url: string) => {
 
 describe('GET /v1/usage', () => {
   it('shows account and user consumption with computed remaining', async () => {
-    const acct = await createAccount(env.app); // Starter 10000/100
-    await createUser(env.app, acct, 'ahmad'); //  Basic 1000/20
+    const acct = await createAccount(env.app);
+    await createUser(env.app, acct, 'ahmad');
     await createUser(env.app, acct, 'sara');
     await consume(env.app, acct, { user_id: 'ahmad', request_id: '1', units: 20 });
     await consume(env.app, acct, { user_id: 'sara', request_id: '2', units: 5 });
@@ -40,8 +40,8 @@ describe('GET /v1/usage', () => {
     const acct = await createAccount(env.app);
     const other = await createAccount(env.app);
     await createUser(env.app, other, 'not-mine');
-    await createUser(env.app, acct, 'ahmad'); // Basic 1000/20
-    const premium = await planIdByName(env.app, acct, 'Premium'); // 10000/200
+    await createUser(env.app, acct, 'ahmad');
+    const premium = await planIdByName(env.app, acct, 'Premium');
     await createUser(env.app, acct, 'sara', premium);
     await createUser(env.app, acct, 'omar');
     await consume(env.app, acct, { user_id: 'ahmad', request_id: '1', units: 20 });
@@ -52,7 +52,7 @@ describe('GET /v1/usage', () => {
     expect(r.body.users.map((u: { user_id: string }) => u.user_id)).toEqual(['ahmad', 'sara', 'omar']);
     expect(r.body.users[0]).toMatchObject({ plan: { name: 'Basic' }, consumed: 20, remaining: 980 });
     expect(r.body.users[1]).toMatchObject({ plan: { name: 'Premium' }, consumed: 90, remaining: 9910 });
-    expect(r.body.users[2]).toMatchObject({ consumed: 0, remaining: 1000 }); // never used: zero, not missing
+    expect(r.body.users[2]).toMatchObject({ consumed: 0, remaining: 1000 });
 
     const page = await get(acct, '/v1/usage?limit=1&offset=1');
     expect(page.body.users.map((u: { user_id: string }) => u.user_id)).toEqual(['sara']);
@@ -124,10 +124,10 @@ describe('GET /v1/history', () => {
   it('does not rewrite history when a plan changes later', async () => {
     const acct = await createAccount(env.app);
     await createUser(env.app, acct, 'sara');
-    await consume(env.app, acct, { user_id: 'sara', request_id: 'old', units: 30 }); // rejected under Basic (max 20)
+    await consume(env.app, acct, { user_id: 'sara', request_id: 'old', units: 30 });
     const premium = await planIdByName(env.app, acct, 'Premium');
     await env.app.inject({ method: 'PUT', url: '/v1/users/sara/plan', headers: acct.auth, payload: { plan_id: premium } });
-    await consume(env.app, acct, { user_id: 'sara', request_id: 'new', units: 30 }); // accepted under Premium
+    await consume(env.app, acct, { user_id: 'sara', request_id: 'new', units: 30 });
     const r = await get(acct, '/v1/history');
     const byId = Object.fromEntries(r.body.requests.map((x: { request_id: string }) => [x.request_id, x]));
     expect(byId.old.accepted).toBe(false);

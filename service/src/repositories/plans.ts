@@ -1,7 +1,5 @@
 import type { Db } from '../db/pool.js';
 
-// Repository = the only place that contains SQL for one table. It knows nothing about HTTP.
-
 export type PlanScope = 'account' | 'user';
 
 export interface Plan {
@@ -17,8 +15,6 @@ export interface Plan {
 
 const PLAN_COLUMNS = `id, name, scope, monthly_allowance, max_per_request, is_predefined, created_at, updated_at`;
 
-// A plan is "visible" to an account if it is predefined (owner IS NULL) or owned by that account.
-// Another account's custom plan is simply not found -> the API answers 404, never revealing it exists.
 export async function listVisible(db: Db, accountId: number): Promise<Plan[]> {
   const { rows } = await db.query<Plan>(
     `SELECT ${PLAN_COLUMNS} FROM plans
@@ -68,8 +64,6 @@ export async function insertCustom(
   return rows[0]!;
 }
 
-// Only the account's OWN custom plans can be updated (owner_account_id = $1 excludes predefined plans).
-// COALESCE keeps the old value for fields the caller did not send.
 export async function updateCustom(
   db: Db,
   planId: number,

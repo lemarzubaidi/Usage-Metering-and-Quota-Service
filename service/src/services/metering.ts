@@ -19,12 +19,9 @@ const usageView = (limits: Limits, consumed: number) => ({
   monthly_allowance: limits.monthly_allowance,
   max_per_request: limits.max_per_request,
   consumed,
-  remaining: remainingOf(limits, consumed), // computed on every read, never stored
+  remaining: remainingOf(limits, consumed),
 });
 
-// Current consumption for the account and for one user (?user_id=) or for all its users (a page at a time),
-// against the plans assigned RIGHT NOW.
-// For a past month the consumed numbers are exact; the limits shown are today's plan limits.
 export async function getUsage(
   pool: pg.Pool,
   clock: () => Date,
@@ -46,7 +43,7 @@ export async function getUsage(
     const userConsumed = await usageRepo.readUserConsumed(pool, user.id, period);
     result.user = { user_id: user.external_user_id, plan: planView(user.plan), ...usageView(user.plan, userConsumed) };
   } else {
-    // no user given: show every user of the account (a page at a time)
+
     const rows = await usageRepo.listUsersWithConsumption(pool, accountId, period, q.limit, q.offset);
     result.users = rows.map((r) => ({
       user_id: r.external_user_id,
@@ -73,7 +70,6 @@ export async function getHistory(
   }
   const period = q.period === undefined ? undefined : resolvePeriod(q.period, clock);
 
-  // ask for one extra row to know whether there is a next page
   const rows = await logRepo.list(pool, {
     accountId,
     userId,
@@ -92,7 +88,7 @@ export async function getHistory(
       ...(r.decision === 'rejected' ? { rejected_by: r.rejected_by, rule: r.rule, violations: r.details.violations } : {}),
       period: periodLabel(r.period),
       created_at: r.created_at,
-      // what was true when the decision was made (plans can change later, this never does)
+
       snapshot: { limits: r.details.limits, consumed_before: r.details.consumed_before, remaining_after: r.details.remaining_after },
     })),
     next_cursor: rows.length > q.limit ? String(page[page.length - 1]!.id) : null,

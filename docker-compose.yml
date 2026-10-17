@@ -1,10 +1,3 @@
-# Start everything:   docker compose up --build
-#   db       PostgreSQL (data kept in the pgdata volume)
-#   service  the HTTP API; on start-up it creates the tables and the four predefined plans by itself
-#   client   the example client: runs one scenario against the service, prints the result, exits
-#
-# Run the automated tests inside Docker:   docker compose --profile test run --rm tests
-# Run the load test inside Docker:         docker compose --profile load run --rm loadtest
 services:
   db:
     image: postgres:16-alpine
@@ -49,7 +42,6 @@ services:
         condition: service_healthy
     restart: "no"
 
-  # Only started on request (profile "test"): docker compose --profile test run --rm tests
   tests:
     profiles: ["test"]
     build:
@@ -62,7 +54,6 @@ services:
       db:
         condition: service_healthy
 
-  # Only started on request (profile "load"): docker compose --profile load run --rm loadtest
   loadtest:
     profiles: ["load"]
     build: ./loadtest

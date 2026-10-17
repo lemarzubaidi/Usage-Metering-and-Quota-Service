@@ -1,13 +1,3 @@
-// Example client for the Usage Metering and Quota Service.
-//
-// It plays the role of an application that uses the service, and shows four things:
-//   1. a request is ACCEPTED
-//   2. a request is REJECTED by a USER limit
-//   3. a request is REJECTED by the ACCOUNT limit (the user itself still has allowance left)
-//   4. after a plan is changed, the very same call is ACCEPTED: the client code did not change
-// Two users of the same account have DIFFERENT plans (alice: small, bob: large).
-// Every run creates a brand-new account, so it can be run again and again.
-
 const BASE_URL = (process.env.SERVICE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 const ADMIN_API_KEY = process.env.ADMIN_API_KEY ?? 'dev-admin-key-change-me';
 
@@ -31,7 +21,7 @@ async function waitForService(): Promise<void> {
       const res = await fetch(`${BASE_URL}/health`);
       if (res.ok) return;
     } catch {
-      /* not up yet */
+
     }
     await new Promise((r) => setTimeout(r, 1000));
   }
@@ -49,7 +39,6 @@ async function main(): Promise<void> {
   console.log(`Using the service at ${BASE_URL}`);
   await waitForService();
 
-  // ---- setup: one account (shared plan), two users with DIFFERENT user plans ----
   step('Setup: create an account (the operator does this once; the API key is shown only now)');
   const created = await call('POST', '/admin/accounts', ADMIN_API_KEY, { name: `Demo app ${Date.now()}` });
   if (created.status !== 201) throw new Error(`Could not create the account: ${JSON.stringify(created.body)}`);
@@ -66,7 +55,6 @@ async function main(): Promise<void> {
   console.log('      alice, small plan: 40 units/month, max 30 per request');
   console.log('      bob,   large plan: 100 units/month, max 50 per request');
 
-  // ---- the only function the "application" needs: ask the service, act on the answer ----
   const runId = Date.now();
   let counter = 0;
   async function consume(user: string, units: number, requestId = `demo-${runId}-${++counter}`) {

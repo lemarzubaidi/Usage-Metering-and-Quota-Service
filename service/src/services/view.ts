@@ -2,9 +2,6 @@ import type { AccountWithPlan } from '../repositories/accounts.js';
 import type { Plan } from '../repositories/plans.js';
 import type { UserWithPlan } from '../repositories/users.js';
 
-// What leaves the service. Internal database ids of users are not exposed: the caller's own
-// identifier (external_user_id) is the only user identifier in the API, called "user_id".
-
 export const planView = (p: Plan) => ({
   id: p.id,
   name: p.name,

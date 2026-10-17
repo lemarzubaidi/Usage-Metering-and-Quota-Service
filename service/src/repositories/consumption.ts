@@ -1,19 +1,6 @@
 import type { Db } from '../db/pool.js';
 import type { Level, RuleName } from '../domain/rules.js';
 
-// The SQL of the consume "hot path". Each function is ONE round trip to the database, and the order
-// below is the order they run in inside the transaction:
-//
-//   BEGIN
-//   1. resolveUserAndEnsureCounters   (before any lock)
-//   2. lockCounters                   <- from here until COMMIT we hold the account's lock
-//   3. readContext
-//   4. recordDecision
-//   COMMIT
-//
-// Every round trip made while the lock is held makes every other request of the same account wait
-// longer, so the work between the lock and COMMIT is kept to the minimum: 2 statements, then COMMIT.
-
 export interface Limits {
   plan_id: number;
   plan_name: string;
@@ -21,7 +8,6 @@ export interface Limits {
   max_per_request: number;
 }
 
-// Snapshot stored with every decision. Later plan changes never rewrite it.
 export interface LogDetails {
   limits: { user: Limits; account: Limits };
   consumed_before: { user: number; account: number };
@@ -29,23 +15,18 @@ export interface LogDetails {
   violations: unknown[];
 }
 
-// An outcome that was already decided and saved (used to answer retries).
 export interface StoredOutcome {
-  user_id: number; // internal id
+  user_id: number;
   external_user_id: string;
   request_id: string;
   units: number;
   decision: 'accepted' | 'rejected';
   rejected_by: Level | null;
   rule: RuleName | null;
-  period: string; // 'YYYY-MM-01'
+  period: string;
   details: LogDetails;
 }
 
-// 1. Find the user (only inside this account) and make sure this month's two counter rows exist.
-//    The INSERT is a data-modifying CTE: PostgreSQL always runs it, even though the final SELECT does
-//    not read it. "ON CONFLICT DO NOTHING" = if another request created the row a moment ago, fine.
-//    Returns null when the user does not exist in this account.
 export async function resolveUserAndEnsureCounters(
   db: Db,
   accountId: number,
@@ -68,13 +49,6 @@ export async function resolveUserAndEnsureCounters(
   return rows[0]?.id ?? null;
 }
 
-// 2. Lock the account counter row and the user counter row, and read what they hold.
-//    SELECT ... FOR UPDATE = "lock these rows until my transaction ends"; any other transaction that
-//    wants them WAITS here and afterwards sees the committed values.
-//    ORDER BY user_id NULLS FIRST: PostgreSQL sorts first and locks the rows in that order (see the
-//    notes on ORDER BY with FOR UPDATE in the SELECT documentation), so the ACCOUNT row (user_id NULL)
-//    is always locked before the user row. All transactions use the same order, so they can never wait
-//    on each other in a circle (no deadlock).
 export async function lockCounters(
   db: Db,
   accountId: number,
@@ -95,8 +69,6 @@ export async function lockCounters(
   return { account: account.consumed, user: user.consumed };
 }
 
-// 3. With the lock held, read in ONE query: (a) was this request_id already answered?  (b) which plans
-//    apply to the user and to the account RIGHT NOW (so a plan change committed a moment ago is seen).
 export async function readContext(
   db: Db,
   accountId: number,
@@ -122,12 +94,10 @@ export async function readContext(
     [accountId, userId, requestId],
   );
   const row = rows[0]!;
-  if (!row.user_limits || !row.account_limits) throw new Error('user or account vanished during consume'); // cannot happen: FKs, no deletes
+  if (!row.user_limits || !row.account_limits) throw new Error('user or account vanished during consume');
   return { existing: row.existing, user: row.user_limits, account: row.account_limits };
 }
 
-// 4. Save the decision, in ONE statement: add the units to BOTH counters (only when accepted) and
-//    insert the request_log row. A statement is atomic, and the transaction makes the whole request atomic.
 export async function recordDecision(
   db: Db,
   r: {

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { evaluate, remainingOf } from '../src/domain/rules.js';
 import { parsePeriodLabel, periodStart } from '../src/domain/period.js';
 
-// Pure unit tests: no database, no HTTP.
 const user = { monthly_allowance: 1000, max_per_request: 20 };
 const account = { monthly_allowance: 10000, max_per_request: 100 };
 const base = { user, account, consumedUser: 0, consumedAccount: 0 };
@@ -13,10 +12,10 @@ describe('evaluate: the four rules', () => {
   });
 
   it('accepts exactly at every limit (boundary is inclusive)', () => {
-    expect(evaluate({ ...base, units: 20 }).accepted).toBe(true); // == user max_per_request
-    expect(evaluate({ ...base, units: 20, consumedUser: 980 }).accepted).toBe(true); // reaches user allowance exactly
-    expect(evaluate({ ...base, units: 20, consumedAccount: 9980 }).accepted).toBe(true); // reaches account allowance exactly
-    expect(evaluate({ user: { monthly_allowance: 500, max_per_request: 200 }, account: { monthly_allowance: 500, max_per_request: 100 }, units: 100, consumedUser: 0, consumedAccount: 0 }).accepted).toBe(true); // == account max_per_request
+    expect(evaluate({ ...base, units: 20 }).accepted).toBe(true);
+    expect(evaluate({ ...base, units: 20, consumedUser: 980 }).accepted).toBe(true);
+    expect(evaluate({ ...base, units: 20, consumedAccount: 9980 }).accepted).toBe(true);
+    expect(evaluate({ user: { monthly_allowance: 500, max_per_request: 200 }, account: { monthly_allowance: 500, max_per_request: 100 }, units: 100, consumedUser: 0, consumedAccount: 0 }).accepted).toBe(true);
   });
 
   it('rejects one unit over each limit and says which one', () => {
@@ -81,7 +80,7 @@ describe('periods (UTC calendar months)', () => {
     expect(periodStart(new Date('2027-01-01T00:00:00Z'))).toBe('2027-01-01');
   });
   it('decides by UTC, not by local time', () => {
-    // 23:30 on 31 Oct in UTC-2 is already 01:30 on 1 Nov in UTC -> November
+
     expect(periodStart(new Date('2026-11-01T01:30:00Z'))).toBe('2026-11-01');
     expect(periodStart(new Date('2026-10-31T23:59:59.999Z'))).toBe('2026-10-01');
   });

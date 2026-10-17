@@ -1,10 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { consume, createAccount, createCustomPlan, createUser, startTestEnv, type TestEnv } from './helpers.js';
 
-// Account isolation: account B must never read, change, consume or even detect account A's data.
-// Rule used everywhere: something that belongs to another account answers 404 (not 403), so B cannot
-// even learn whether it exists.
-
 let env: TestEnv;
 beforeAll(async () => { env = await startTestEnv(); });
 afterAll(async () => { await env.close(); });
@@ -31,7 +27,6 @@ describe('users and consumption', () => {
     const premium = (await call(b, 'GET', '/v1/plans')).body.plans.find((p: { name: string }) => p.name === 'Premium').id;
     expect((await call(b, 'PUT', '/v1/users/only-a/plan', { plan_id: premium })).status).toBe(404);
 
-    // nothing of A changed
     expect((await call(a, 'GET', '/v1/usage?user_id=only-a')).body.user.consumed).toBe(0);
     const { rows } = await env.pool.query('SELECT count(*) FROM request_log WHERE account_id = $1', [a.id]);
     expect(Number(rows[0].count)).toBe(0);
@@ -43,7 +38,7 @@ describe('users and consumption', () => {
       method: 'POST', url: '/v1/consume', headers: b.auth,
       payload: { user_id: 'only-a', request_id: 'x', units: 1, account_id: a.id },
     });
-    expect(res.statusCode).toBe(400); // unknown field refused
+    expect(res.statusCode).toBe(400);
     const res2 = await env.app.inject({ method: 'POST', url: '/v1/users', headers: b.auth, payload: { user_id: 'z', account_id: a.id } });
     expect(res2.statusCode).toBe(400);
   });
@@ -71,7 +66,7 @@ describe('users and consumption', () => {
     const b = await createAccount(env.app);
     await createUser(env.app, a, 'u');
     await createUser(env.app, b, 'u');
-    for (let i = 0; i < 50; i++) await consume(env.app, a, { user_id: 'u', request_id: `r${i}`, units: 20 }); // Basic: 1000 -> exhausted
+    for (let i = 0; i < 50; i++) await consume(env.app, a, { user_id: 'u', request_id: `r${i}`, units: 20 });
     expect((await consume(env.app, a, { user_id: 'u', request_id: 'more', units: 1 })).body.accepted).toBe(false);
     expect((await consume(env.app, b, { user_id: 'u', request_id: 'first', units: 20 })).body.accepted).toBe(true);
   });
@@ -95,7 +90,6 @@ describe('plans', () => {
     expect((await call(b, 'PUT', '/v1/account/plan', { plan_id: accountSecret })).status).toBe(404);
     expect((await call(b, 'POST', '/v1/users', { user_id: 'new', plan_id: secret })).status).toBe(404);
 
-    // A's plan is untouched
     expect((await call(a, 'GET', `/v1/plans/${secret}`)).body.plan.monthly_allowance).toBe(5);
   });
 

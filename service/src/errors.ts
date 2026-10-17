@@ -1,5 +1,3 @@
-// One error type for everything the client can cause. The HTTP layer turns it into
-// { "error": { "code": "...", "message": "...", "details": ... } } with the right status.
 export class AppError extends Error {
   constructor(
     public readonly status: number,
@@ -21,7 +19,6 @@ export const notFound = (message: string) => new AppError(404, 'not_found', mess
 export const conflict = (code: string, message: string, details?: unknown) =>
   new AppError(409, code, message, details);
 
-// PostgreSQL error codes we react to (https://www.postgresql.org/docs/16/errcodes-appendix.html)
 export const PG_UNIQUE_VIOLATION = '23505';
 
 export function isPgError(err: unknown, code: string): boolean {
