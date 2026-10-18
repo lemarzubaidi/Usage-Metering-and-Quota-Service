@@ -32,41 +32,55 @@ export type Decision =
       violations: Violation[];
     };
 
+export interface Rule {
+  level: Level;
+  name: RuleName;
+  check(input: EvaluateInput): Violation | null;
+}
+
 export function remainingOf(limits: Limits, consumed: number): number {
   return Math.max(0, limits.monthly_allowance - consumed);
 }
 
-export function evaluate(input: EvaluateInput): Decision {
-  const { units, user, account, consumedUser, consumedAccount } = input;
-  const violations: Violation[] = [];
+const limitsOf = (input: EvaluateInput, level: Level) => (level === 'user' ? input.user : input.account);
+const consumedOf = (input: EvaluateInput, level: Level) => (level === 'user' ? input.consumedUser : input.consumedAccount);
 
-  if (units > user.max_per_request) {
-    violations.push({ level: 'user', rule: 'max_per_request', limit: user.max_per_request, requested: units });
-  }
-  if (units > account.max_per_request) {
-    violations.push({ level: 'account', rule: 'max_per_request', limit: account.max_per_request, requested: units });
-  }
-  if (consumedUser + units > user.monthly_allowance) {
-    violations.push({
-      level: 'user',
-      rule: 'monthly_allowance',
-      limit: user.monthly_allowance,
-      requested: units,
-      consumed: consumedUser,
-      remaining: remainingOf(user, consumedUser),
-    });
-  }
-  if (consumedAccount + units > account.monthly_allowance) {
-    violations.push({
-      level: 'account',
-      rule: 'monthly_allowance',
-      limit: account.monthly_allowance,
-      requested: units,
-      consumed: consumedAccount,
-      remaining: remainingOf(account, consumedAccount),
-    });
-  }
+export const maxPerRequest = (level: Level): Rule => ({
+  level,
+  name: 'max_per_request',
+  check(input) {
+    const limit = limitsOf(input, level).max_per_request;
+    return input.units > limit ? { level, rule: 'max_per_request', limit, requested: input.units } : null;
+  },
+});
 
+export const monthlyAllowance = (level: Level): Rule => ({
+  level,
+  name: 'monthly_allowance',
+  check(input) {
+    const limits = limitsOf(input, level);
+    const consumed = consumedOf(input, level);
+    if (consumed + input.units <= limits.monthly_allowance) return null;
+    return {
+      level,
+      rule: 'monthly_allowance',
+      limit: limits.monthly_allowance,
+      requested: input.units,
+      consumed,
+      remaining: remainingOf(limits, consumed),
+    };
+  },
+});
+
+export const DEFAULT_RULES: readonly Rule[] = [
+  maxPerRequest('user'),
+  maxPerRequest('account'),
+  monthlyAllowance('user'),
+  monthlyAllowance('account'),
+];
+
+export function evaluate(input: EvaluateInput, rules: readonly Rule[] = DEFAULT_RULES): Decision {
+  const violations = rules.map((rule) => rule.check(input)).filter((v): v is Violation => v !== null);
   const first = violations[0];
   if (!first) return { accepted: true };
   return { accepted: false, rejected_by: first.level, rule: first.rule, violations };

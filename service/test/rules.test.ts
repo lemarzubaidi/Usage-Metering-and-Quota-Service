@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluate, remainingOf } from '../src/domain/rules.js';
+import { DEFAULT_RULES, evaluate, remainingOf } from '../src/domain/rules.js';
 import { parsePeriodLabel, periodStart } from '../src/domain/period.js';
 
 const user = { monthly_allowance: 1000, max_per_request: 20 };
@@ -89,5 +89,28 @@ describe('periods (UTC calendar months)', () => {
     expect(parsePeriodLabel('2026-13')).toBeNull();
     expect(parsePeriodLabel('2026-1')).toBeNull();
     expect(parsePeriodLabel('abc')).toBeNull();
+  });
+});
+
+describe('rules as strategies', () => {
+  it('lets a new rule be added without changing evaluate()', () => {
+    const noBigRequestsAtNight = {
+      level: 'account' as const,
+      name: 'max_per_request' as const,
+      check: (input: { units: number }) =>
+        input.units > 5 ? { level: 'account' as const, rule: 'max_per_request' as const, limit: 5, requested: input.units } : null,
+    };
+    const rules = [...DEFAULT_RULES, noBigRequestsAtNight];
+    expect(evaluate({ ...base, units: 10 }, rules)).toMatchObject({ accepted: false, rejected_by: 'account' });
+    expect(evaluate({ ...base, units: 10 })).toEqual({ accepted: true });
+  });
+
+  it('keeps the fixed order: per-request before monthly, user before account', () => {
+    expect(DEFAULT_RULES.map((r) => `${r.level}:${r.name}`)).toEqual([
+      'user:max_per_request',
+      'account:max_per_request',
+      'user:monthly_allowance',
+      'account:monthly_allowance',
+    ]);
   });
 });
