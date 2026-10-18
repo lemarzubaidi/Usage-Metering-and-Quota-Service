@@ -12,6 +12,7 @@ export function createPool(connectionString = process.env.DATABASE_URL): pg.Pool
   return new pg.Pool({
     connectionString,
     max: Number(process.env.DB_POOL_MAX ?? 10),
+    options: '-c statement_timeout=15000 -c idle_in_transaction_session_timeout=15000',
   });
 }
 
@@ -28,7 +29,7 @@ export async function withTransaction<T>(pool: pg.Pool, fn: (client: pg.PoolClie
     try {
       await client.query('ROLLBACK');
     } catch {
-
+      throw err;
     }
     throw err;
   } finally {

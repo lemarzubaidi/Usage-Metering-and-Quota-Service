@@ -21,6 +21,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER:-metering}:${POSTGRES_PASSWORD:-metering}@db:5432/${POSTGRES_DB:-metering}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key-change-me}
       PORT: 3000
+    mem_limit: 256m
     ports:
       - "3000:3000"
     depends_on:
