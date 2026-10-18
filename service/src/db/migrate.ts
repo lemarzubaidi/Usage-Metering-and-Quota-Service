@@ -14,7 +14,6 @@ export async function runMigrations(pool: pg.Pool): Promise<string[]> {
   const client = await pool.connect();
   const applied: string[] = [];
   try {
-
     await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_KEY]);
 
     await client.query(`

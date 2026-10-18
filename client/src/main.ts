@@ -21,7 +21,6 @@ async function waitForService(): Promise<void> {
       const res = await fetch(`${BASE_URL}/health`);
       if (res.ok) return;
     } catch {
-
     }
     await new Promise((r) => setTimeout(r, 1000));
   }

@@ -18,7 +18,6 @@ export async function createUser(pool: pg.Pool, accountId: number, input: { exte
   try {
     await usersRepo.insert(pool, accountId, input.external_user_id, planId);
   } catch (err) {
-
     if (isPgError(err, PG_UNIQUE_VIOLATION)) {
       throw conflict('user_exists', `User '${input.external_user_id}' already exists in this account`);
     }

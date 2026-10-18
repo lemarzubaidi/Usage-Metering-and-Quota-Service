@@ -80,7 +80,6 @@ describe('periods (UTC calendar months)', () => {
     expect(periodStart(new Date('2027-01-01T00:00:00Z'))).toBe('2027-01-01');
   });
   it('decides by UTC, not by local time', () => {
-
     expect(periodStart(new Date('2026-11-01T01:30:00Z'))).toBe('2026-11-01');
     expect(periodStart(new Date('2026-10-31T23:59:59.999Z'))).toBe('2026-10-01');
   });

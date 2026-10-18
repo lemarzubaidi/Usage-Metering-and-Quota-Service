@@ -43,7 +43,6 @@ export async function getUsage(
     const userConsumed = await usageRepo.readUserConsumed(pool, user.id, period);
     result.user = { user_id: user.external_user_id, plan: planView(user.plan), ...usageView(user.plan, userConsumed) };
   } else {
-
     const rows = await usageRepo.listUsersWithConsumption(pool, accountId, period, q.limit, q.offset);
     result.users = rows.map((r) => ({
       user_id: r.external_user_id,
