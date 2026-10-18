@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type pg from 'pg';
 import type { Config } from '../config.js';
+import { DecisionCounters, DecisionEvents } from '../domain/events.js';
 import { AppError } from '../errors.js';
 import { authenticateAccount } from './auth.js';
 import { accountRoutes } from './routes/accountRoutes.js';
@@ -10,7 +11,17 @@ import { meteringRoutes } from './routes/meteringRoutes.js';
 export function buildApp(deps: { pool: pg.Pool; config: Config; clock?: () => Date }): FastifyInstance {
   const { pool, config } = deps;
   const clock = deps.clock ?? (() => new Date());
-  const app = Fastify({ logger: config.logLevel === 'silent' ? false : { level: config.logLevel } });
+  const app = Fastify({
+    logger: config.logLevel === 'silent' ? false : { level: config.logLevel },
+    bodyLimit: 16 * 1024,
+  });
+
+  const events = new DecisionEvents();
+  const counters = new DecisionCounters();
+  events.subscribe(counters.listener);
+  events.subscribe((e) =>
+    app.log.info({ account: e.accountId, user: e.userId, request_id: e.requestId, units: e.units, accepted: e.accepted, replayed: e.replayed, rejected_by: e.rejectedBy, rule: e.rule }, 'decision'),
+  );
 
   app.setErrorHandler((err, request, reply) => {
     if (err instanceof AppError) {
@@ -31,7 +42,7 @@ export function buildApp(deps: { pool: pg.Pool; config: Config; clock?: () => Da
 
   app.get('/health', async () => {
     await pool.query('SELECT 1');
-    return { status: 'ok' };
+    return { status: 'ok', decisions: counters.snapshot() };
   });
 
   adminRoutes(app, { pool, adminApiKey: config.adminApiKey });
@@ -39,7 +50,7 @@ export function buildApp(deps: { pool: pg.Pool; config: Config; clock?: () => Da
   app.register(async (v1) => {
     v1.addHook('onRequest', authenticateAccount(pool));
     accountRoutes(v1, { pool });
-    meteringRoutes(v1, { pool, clock });
+    meteringRoutes(v1, { pool, clock, events });
   });
 
   return app;

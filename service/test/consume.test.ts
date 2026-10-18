@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { DecisionEvents } from '../src/domain/events.js';
 import {
   consume,
   createAccount,
@@ -329,5 +330,35 @@ describe('concurrency (many requests at the same moment)', () => {
       expect(await consumed(acct, u)).toBe(mine);
       expect(mine).toBeLessThanOrEqual(80);
     }
+  });
+});
+
+describe('decision events (observer)', () => {
+  it('publishes one event per decision, marks replays, and counts them in /health', async () => {
+    const acct = await createAccount(env.app);
+    await createUser(env.app, acct, 'sara');
+    const before = (await env.app.inject({ method: 'GET', url: '/health' })).json().decisions;
+    await consume(env.app, acct, { user_id: 'sara', request_id: 'e1', units: 5 });
+    await consume(env.app, acct, { user_id: 'sara', request_id: 'e2', units: 500 });
+    await consume(env.app, acct, { user_id: 'sara', request_id: 'e1', units: 5 });
+    const after = (await env.app.inject({ method: 'GET', url: '/health' })).json().decisions;
+    expect(after.accepted - before.accepted).toBe(1);
+    expect(after.rejected - before.rejected).toBe(1);
+    expect(after.replayed - before.replayed).toBe(1);
+  });
+
+  it('does not let a failing listener break the request', () => {
+    const events = new DecisionEvents();
+    let reached = false;
+    events.subscribe(() => { throw new Error('listener bug'); });
+    events.subscribe(() => { reached = true; });
+    events.publish({ accountId: 1, userId: 'u', requestId: 'r', units: 1, accepted: true, replayed: false });
+    expect(reached).toBe(true);
+  });
+
+  it('rejects an oversized body before parsing it', async () => {
+    const acct = await createAccount(env.app);
+    const res = await env.app.inject({ method: 'POST', url: '/v1/consume', headers: acct.auth, payload: { user_id: 'x'.repeat(20000), request_id: 'r', units: 1 } });
+    expect(res.statusCode).toBe(413);
   });
 });

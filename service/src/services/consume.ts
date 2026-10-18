@@ -1,6 +1,7 @@
 import type pg from 'pg';
 import { withTransaction } from '../db/pool.js';
 import { periodLabel, periodStart } from '../domain/period.js';
+import type { DecisionEvents } from '../domain/events.js';
 import { evaluate, remainingOf, type Level, type RuleName } from '../domain/rules.js';
 import { conflict, notFound } from '../errors.js';
 import * as consumption from '../repositories/consumption.js';
@@ -30,10 +31,11 @@ export async function consume(
   clock: () => Date,
   accountId: number,
   input: ConsumeInput,
+  events?: DecisionEvents,
 ): Promise<ConsumeResult> {
   const period = periodStart(clock());
 
-  return withTransaction(pool, async (tx) => {
+  const result = await withTransaction(pool, async (tx) => {
     const userId = await consumption.resolveUserAndEnsureCounters(tx, accountId, input.user_id, period);
     if (userId === null) throw notFound(`User '${input.user_id}' not found`);
 
@@ -92,6 +94,18 @@ export async function consume(
       replayed: false,
     };
   });
+
+  events?.publish({
+    accountId,
+    userId: input.user_id,
+    requestId: input.request_id,
+    units: input.units,
+    accepted: result.accepted,
+    replayed: result.replayed,
+    rejectedBy: result.rejected_by,
+    rule: result.rule,
+  });
+  return result;
 }
 
 function fromStored(row: StoredOutcome, replayed: boolean): ConsumeResult {

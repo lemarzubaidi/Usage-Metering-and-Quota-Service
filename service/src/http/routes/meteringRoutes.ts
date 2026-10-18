@@ -1,15 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 import type pg from 'pg';
+import type { DecisionEvents } from '../../domain/events.js';
 import * as consumeService from '../../services/consume.js';
 import * as meteringService from '../../services/metering.js';
 import { consumeBody, historyQuery, parse, usageQuery } from '../schemas.js';
 
-export function meteringRoutes(app: FastifyInstance, deps: { pool: pg.Pool; clock: () => Date }) {
-  const { pool, clock } = deps;
+export function meteringRoutes(app: FastifyInstance, deps: { pool: pg.Pool; clock: () => Date; events: DecisionEvents }) {
+  const { pool, clock, events } = deps;
 
   app.post('/v1/consume', async (request) => {
     const body = parse(consumeBody, request.body);
-    return consumeService.consume(pool, clock, request.account.id, body);
+    return consumeService.consume(pool, clock, request.account.id, body, events);
   });
 
   app.get('/v1/usage', async (request) => {
