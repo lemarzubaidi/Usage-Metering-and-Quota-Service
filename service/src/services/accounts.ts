@@ -1,5 +1,5 @@
 import type pg from 'pg';
-import { generateApiKey } from '../auth/apiKey.js';
+import { generateApiKey, hashApiKey } from '../auth/apiKey.js';
 import { AppError, notFound } from '../errors.js';
 import * as accountsRepo from '../repositories/accounts.js';
 import * as plansRepo from '../repositories/plans.js';
@@ -13,7 +13,6 @@ export async function createAccount(pool: pg.Pool, input: { name: string; plan_i
     plan = await plansRepo.findPredefinedByName(pool, 'account', DEFAULT_ACCOUNT_PLAN);
     if (!plan) throw new Error(`Predefined plan '${DEFAULT_ACCOUNT_PLAN}' is missing: were the migrations applied?`);
   } else {
-
     plan = await plansRepo.findPredefinedById(pool, input.plan_id);
     if (!plan) throw notFound(`Predefined plan ${input.plan_id} not found`);
     if (plan.scope !== 'account') {
@@ -36,4 +35,10 @@ export async function changeAccountPlan(pool: pg.Pool, accountId: number, planId
   const plan = await resolveAssignablePlan(pool, accountId, planId, 'account');
   await accountsRepo.setPlan(pool, accountId, plan.id);
   return getAccount(pool, accountId);
+}
+
+export type { AccountWithPlan } from '../repositories/accounts.js';
+
+export async function authenticate(pool: pg.Pool, apiKey: string) {
+  return accountsRepo.findByKeyHash(pool, hashApiKey(apiKey));
 }
