@@ -32,6 +32,33 @@ Each consume runs 4 statements plus BEGIN/COMMIT (after the account's lock is ta
 
 Two further full runs of the current version gave scenario 2 = 267 and 236 req/s, scenario 1 = 443 and 426 req/s.
 
+## Latest run: memory and database behaviour
+
+Same machine, final code (named constraints, `fillfactor = 70` on `usage_counters`, statement timeouts, decision events, the extra `request_log (account_id, id DESC)` index). Run-to-run noise is about +-10%, so differences from the table above are not significant. The service's own decision counters (`GET /health`) matched the test exactly: 16501 accepted, 4000 rejected, 299 replayed.
+
+| Scenario | Requests | Concurrency | Seconds | Req/s | Latency ms p50 / p95 / p99 / max | Accepted / Rejected / Replayed | HTTP errors | Correct |
+|---|---:|---:|---:|---:|---|---|---:|---|
+| 0. baseline, 1 at a time | 500 | 1 | 2.9 | 170 | 5 / 8 / 14 / 355 | 500 / 0 / 0 | 0 | PASS |
+| 1. 10 accounts, 20 users each | 10000 | 50 | 17.8 | 561 | 85 / 126 / 161 / 241 | 10000 / 0 / 0 | 0 | PASS |
+| 2. 1 account, 20 users | 5000 | 50 | 18.8 | 267 | 185 / 264 / 300 / 388 | 5000 / 0 / 0 | 0 | PASS |
+| 3. allowance 1000, many requests | 5000 | 100 | 17.1 | 292 | 341 / 416 / 434 / 447 | 1000 / 4000 / 0 | 0 | PASS |
+| 4. one request_id x300 | 300 | 100 | 0.7 | 447 | 217 / 238 / 245 / 248 | 1 / 0 / 299 | 0 | PASS |
+
+| Measurement | Result |
+|---|---|
+| Service process memory (RSS), sampled every 0.5 s during all 5 scenarios, 21,301 requests | 76 MB at start, median 104 MB, **max 104 MB**, flat (no growth) |
+| `usage_counters`: share of UPDATEs that were HOT (no index write) | **99.7%** (32,915 of 33,000) |
+| `usage_counters` size after the run | 280 kB including indexes |
+| `request_log` average row size (JSONB snapshot included) | 588 bytes |
+
+Why memory stays flat: no cache or list grows with traffic (counters are three integers), the request body limit is 16 KB, pages are limited to 200 rows, the database pool is 10 connections, and the container is capped (`mem_limit: 256m`, Node heap `--max-old-space-size=160`).
+
+Why updates are HOT: `consumed` and `updated_at` are not indexed and `fillfactor = 70` leaves room in each page, so PostgreSQL can write the new row version in the same page without touching the indexes. This keeps the hottest table small and cheap to vacuum.
+
+History query plan: on 400,000 rows of mixed accounts, `EXPLAIN` showed the planner either walking the primary key and filtering by account, or using the per-user index and sorting, depending on how the account's rows were spread. With the `(account_id, id DESC)` index the query is always a short index scan that stops after `limit` rows.
+
+To measure on your machine: `docker stats --no-stream` while the load test runs, and `SELECT relname, n_tup_upd, n_tup_hot_upd FROM pg_stat_user_tables;`.
+
 ## What changed and what it showed
 
 | Scenario | Before | After |
